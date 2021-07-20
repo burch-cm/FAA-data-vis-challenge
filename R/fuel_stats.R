@@ -12,6 +12,9 @@ fs <-
          d_num = paste(m_digit, c_year, sep = "/"),
          date = parse_date_time(d_num, orders = c("m/Y"))) |>
   select(type, FY, month, date, gge)
+
+write_rds(fs, "./data/fuel_stats_summary.rds")
+
 # fs |>
 #   drop_na(gge) |>
 #   ggplot(aes(x = date, y = gge)) +
