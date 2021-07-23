@@ -6,6 +6,7 @@ pacman::p_load(dplyr,
                shinythemes,
                chorddiag,
                plotly,
+               shinyjs,
                htmltools)
 # values
 state_abb <- c(state.abb, "DC", "AE", "GU", "PR", "AS")
@@ -30,11 +31,7 @@ ui <- dashboardPage(
       menuItem("Vehicle Locations",
                tabName = 'vehicleMap',
                icon = icon('map'))
-    ),
-    selectInput("states", label = "States",
-                choices = state_abb,
-                multiple = TRUE),
-    actionButton("resetButton", "Clear Filter")
+    )
   ),
   
   dashboardBody(
@@ -54,12 +51,18 @@ ui <- dashboardPage(
                    valueBoxOutput("alt_count", width = 4),
                    valueBoxOutput("petro_count", width = 4)
                  ),
+                 fluidRow(
+                   box(width = 12,
+                       selectInput("states", label = "States",
+                                   choices = state_abb,
+                                   multiple = TRUE),
+                       actionButton("resetButton", "Clear Filter"))
+                 ),
                  box(
                    tagList(
                      div("This chart displays information for 'on-road reportable' 
               vehicles, a category which includes all non-industrial wheeled 
-              vehicles authorized to travel on public roadways. 
-              All on-road reportable vehicles have license plates."),
+              vehicles authorized to travel on public roadways."),
                      tags$br(),
                      div("This category does not include specialty vehicles used in 
               construction (e.g., bucket loaders) or vehicles without an engine 
@@ -73,7 +76,7 @@ ui <- dashboardPage(
       # second tab
       tabItem(tabName = 'vehicleMap',
         fluidRow(
-          plotlyOutput('fleet_map')
+          box(plotlyOutput("fleet_map"), width = 9),
         )
       )
     )
@@ -83,7 +86,8 @@ ui <- dashboardPage(
 server <- function(input, output, session) {
   # load inventory data
   inv_data <- readr::read_rds("../data/fleet_inv.rds")
-  
+  # load fuel data
+  fuel <- readr::read_rds("../data/fuel_by_state.rds")
   # extract states
   states <- inv_data |> dplyr::distinct(garage_state)
   # specify chord colors
@@ -125,23 +129,6 @@ server <- function(input, output, session) {
              width = NULL)
   })
    
-  # output$inv_plot <- renderPlot({
-  #   sel_inv() |> 
-  #     dplyr::select(garage_state, vehicle_class, fuel_class) |> 
-  #     dplyr::mutate(across(everything(), ~ as.factor(.x))) |> 
-  #     dplyr::group_by(garage_state) |> 
-  #     dplyr::add_count(name = "state_total") |>
-  #     dplyr::arrange(desc(state_total)) |> 
-  #     dplyr::count(state_total, vehicle_class, 
-  #                  fuel_class, name = "vehicles", sort = TRUE) |> 
-  #     ggplot2::ggplot(aes(x = reorder(garage_state, state_total), 
-  #                         y = vehicles, fill = fuel_class)) +
-  #     ggplot2::geom_bar(stat = "identity", position = "stack") +
-  #     labs(x = "State", y = "Count of Vehicles", 
-  #          title = "Count of Vehicle by State") +
-  #     coord_flip()
-  # })
-  
   # helper function to plot value boxes
   render_value_box <- function(group, subtitle, col, icon = icon('car')) {
     renderValueBox({
@@ -154,59 +141,69 @@ server <- function(input, output, session) {
   }
   
   output$ev_count <- render_value_box(group = "Electric",
-                                      subtitle = "Electric",
+                                      subtitle = "Electric Vehicles",
                                       col = "green",
                                       icon = icon("plug"))
   
   output$alt_count <- render_value_box(group = "Alternative",
-                                      subtitle = "Alt. Fuel",
+                                      subtitle = "Alt. Fuel Vehicles",
                                       col = "orange",
                                       icon = icon("recycle"))
   
   output$petro_count <- render_value_box(group = "Petroleum",
-                                      subtitle = "Petroleum",
+                                      subtitle = "Petroleum Vehicles",
                                       col = "maroon",
                                       icon = icon("gas-pump"))
   
+  # plotly map options
+  g <- list(
+      scope = 'usa',
+      projection = list(type = 'albers usa'),
+      showlakes = FALSE,
+      lakecolor = toRGB('white')
+    )
   
-  # plot map
+  # plot vehicle map
+  us_states <- geojsonio::geojson_read("../json/gz_2010_us_040_00_5m.json", what = "sp")
+
   output$fleet_map <- renderPlotly({
-    
-    hover_text <- 
-      inv_data |>
-      # sel_inv() |>
-      count(garage_state, fuel_class) |> 
-      left_join(states, by = 'garage_state') |> 
-      pivot_wider(id_cols = c(garage_state, state_name), 
-                  names_from = fuel_class, 
-                  values_from = n) |>
-      replace_na(list(E85 = 0, GAS = 0, HEV = 0, FEV = 0, `B20/CNG` = 0)) |> 
-      mutate(hover = paste(state_name, "\n",
-                           "E85: ", E85, "\n",
-                           "DSL: ", DSL, "\n",
-                           "GAS: ", GAS, "\n",
-                           "HEV: ", HEV, "\n",
-                           "FEV: ", FEV, "\n",
-                           "B20/CNG: ", `B20/CNG`, sep = ""))
-    f <- 
-      inv_data |>
-      # sel_inv() |>
-      count(garage_state, name = 'total') |>
-      left_join(hover_text, by = 'garage_state') |> 
-      plot_geo(locationmode = 'USA-states') |> 
-      add_trace(locations = ~ garage_state, 
-                z = ~total,
-                text = ~hover,
-                color = ~total,
-                colors = "Blues") |> 
-      colorbar(title = "Vehicles") |> 
-      layout(title = 'FAA Vehicle Count by Garaged State',
-             geo = list(scope = 'usa',
-                        projection = list(type = 'albers usa'),
-                        showlakes = FALSE,
-                        lakecolor = toRGB('white')))
-    f
+    plot_geo({inv_data |>
+              select(state = garage_state) |>
+              count(state, name = "vehicles", sort = TRUE)},
+              locationmode = "USA-states") |>
+    add_trace(z = ~ vehicles,
+              locations = ~ state) |>
+    layout(geo = g,
+           title = paste(input$fuel_type, "Vehicle Count by State, FY2020"))
   })
+  
+  # plot fuel timeline
+  # output$fuel_timeline <- renderDygraph({
+  #   fuel_mx <-
+  #     fuel |> 
+  #     select(date = purchase_date, purchase_fuel, units) |>
+  #     group_by(date, purchase_fuel) |> 
+  #     summarize(units = sum(units), .groups = 'drop') |> 
+  #     pivot_wider(id_cols = date, names_from = purchase_fuel, values_from = units) |> 
+  #     select(date, E85, GAS, DSL)
+  #   
+  #   fuel_matrix <-
+  #     fuel_mx |> 
+  #     select(E85, GAS, DSL) |> 
+  #     xts(order.by = fuel_mx$date)
+  #   
+  #   dygraph(fuel_matrix) |> 
+  #     dySeries('GAS') |> 
+  #     dySeries('E85') |> 
+  #     dySeries('DSL') |> 
+  #     dyOptions(colors = RColorBrewer::brewer.pal(3, 'Set2'),
+  #               stepPlot = TRUE,
+  #               fillGraph = TRUE,
+  #               fillAlpha = 0.5,
+  #               drawGrid = FALSE) |> 
+  #     dyAxis('y', label = "Units (GGE)") |> 
+  #     dyRangeSelector(height = 20)
+  # })
   
 }
 shinyApp(ui, server)
