@@ -47,12 +47,16 @@ vehicle_class <-
 ##### inventory #####
 
 inv <- 
-  readxl::read_excel("./rawdata/Leased and Owned Inventory by LOB May 2021.xlsx",
+  readxl::read_excel(here::here("rawdata/Leased and Owned Inventory by LOB May 2021.xlsx"),
                      sheet = "inv") |> 
   janitor::clean_names() |> 
   dplyr::left_join(fuel_class, by = "fuel_type") |> 
-  dplyr::left_join(vehicle_class, by = "vehicle_type")
+  dplyr::left_join(vehicle_class, by = "vehicle_type") |> 
+  select(-c(tag, vin, starts_with("contact"), starts_with("garage_address"),
+            fleet_manager, starts_with("fsr"), starts_with("level"),
+            customer_number, exp_org, cost_center_desc))
 
 ##### write to inventory #####
 
-readr::write_rds(inv, "./data/fleet_inv.rds")
+readr::write_rds(inv, here::here("data/fleet_inv.rds"))
+readr::write_rds(inv, here::here("app/appdata/fleet_inv.rds"))

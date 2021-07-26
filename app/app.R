@@ -51,7 +51,7 @@ ui <- dashboardPage(
                                          width = "100%",
                                          height = "500px"),
             width = 6,
-            title = "Count of Fleet Vehicles - Fuel and Vehicle Body Type"),
+            title = "Count of Fleet Vehicles by Fuel and Vehicle Body Type"),
           column(width = 6,
                  valueBoxOutput("vehicle_count", width = NULL),
                  fluidRow(
@@ -62,7 +62,7 @@ ui <- dashboardPage(
                  box(div("Alternative Fuels are defined by the US Dept. of Energy, and 
                           include Ethanol or E85, Biodiesel, Natural Gas, Propane, and 
                           gas-powered Hybrid Electric vehicles."),
-                     title = "What Types of Fuel are Considered 'Alternative'?",
+                     title = "What types of fuel are considered 'Alternative'?",
                      width = NULL), 
                  box(div("This chart displays information for 'on-road reportable' 
                           vehicles, a category which includes all non-industrial wheeled 
