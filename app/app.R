@@ -400,8 +400,7 @@ server <- function(input, output, session) {
     
     plot_geo(inv_state, 
              type = 'choropleth', 
-             locationmode = 'USA-states',
-             mode = 'markers') |> 
+             locationmode = 'USA-states') |> 
       add_trace(z = ~ vehicle_count,
                 text = ~ desc,
                 locations = ~ garage_state,
