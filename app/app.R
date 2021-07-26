@@ -17,7 +17,8 @@ state_name <- c(state.name,
                 "American Samoa")
 states <- data.frame(garage_state = state_abb, state_name = state_name)
 
-# dashboard
+##### dashboard UI #####
+
 ui <- dashboardPage(
   
   shinydashboard::dashboardHeader(title = "FAA Fleet"),
@@ -27,6 +28,9 @@ ui <- dashboardPage(
       menuItem("Fleet Composition",
                tabName = 'composition',
                icon = icon('car')),
+      menuItem("Vehicle Location",
+               tabName = 'vehMap',
+               icon = icon('map')),
       menuItem("Fuel Use",
                tabName = 'fuelUse',
                icon = icon('gas-pump'))
@@ -36,8 +40,9 @@ ui <- dashboardPage(
   shinydashboard::dashboardBody(
     
     tabItems(
-      # first tab
-      tabItem(tabName = 'composition',
+      # chord tab
+      tabItem(
+        tabName = 'composition',
         fluidRow(
           box(
             div(
@@ -51,7 +56,7 @@ ui <- dashboardPage(
                                          width = "100%",
                                          height = "500px"),
             width = 6,
-            title = "Count of Fleet Vehicles - Fuel and Vehicle Body Type"),
+            title = "Count of Fleet Vehicles by Fuel and Vehicle Body Type"),
           column(width = 6,
                  valueBoxOutput("vehicle_count", width = NULL),
                  fluidRow(
@@ -62,21 +67,22 @@ ui <- dashboardPage(
                  box(div("Alternative Fuels are defined by the US Dept. of Energy, and 
                           include Ethanol or E85, Biodiesel, Natural Gas, Propane, and 
                           gas-powered Hybrid Electric vehicles."),
-                     title = "What Types of Fuel are Considered 'Alternative'?",
+                     title = "What types of fuel are considered 'Alternative'?",
                      width = NULL), 
                  box(div("This chart displays information for 'on-road reportable' 
-                          vehicles, a category which includes all non-industrial wheeled 
-                          vehicles authorized to travel on public roadways. 
+                          vehicles, a category which includes all non-industrial
+                          wheeled vehicles authorized to travel on public roadways. 
                           All on-road reportable vehicles have license plates. 
                           This category does not include specialty vehicles used in 
-                          construction (e.g., bucket loaders) or vehicles without an engine 
-                          (e.g. trailers)."),
+                          construction (e.g., bucket loaders) or vehicles without 
+                          an engine (e.g. trailers)."),
                      title = "What types of vehicles are tracked?",
                      width = NULL)
           )
         )
       ),
-      # second tab
+      
+      # fuel tab
       tabItem(tabName = 'fuelUse',
         fluidRow(
           box(plotly::plotlyOutput("fuel_sunburst",
@@ -106,14 +112,32 @@ ui <- dashboardPage(
                      title = "What is GGE?",
                      width = NULL), 
                  box(div("This chart displays information for 'on-road reportable' 
-                          vehicles, a category which includes all non-industrial wheeled 
-                          vehicles authorized to travel on public roadways. 
+                          vehicles, a category which includes all non-industrial
+                          wheeled vehicles authorized to travel on public roadways. 
                           All on-road reportable vehicles have license plates. 
                           This category does not include specialty vehicles used in 
-                          construction (e.g., bucket loaders) or vehicles without an engine 
-                          (e.g. trailers)."),
+                          construction (e.g., bucket loaders) or vehicles without 
+                          an engine (e.g. trailers)."),
                      title = "What types of vehicles are tracked?",
-                     width = NULL),
+                     width = NULL)
+          )
+        )
+      ),
+      
+      # map tab
+      tabItem(tabName = 'vehMap',
+        fluidRow(
+          box(plotlyOutput("vehicle_map", height = "500px"),
+              width = 6, title = "Vehicle Count by State"),
+          column(width = 6,
+                 valueBoxOutput("total_vehicles", width = NULL),
+                 fluidRow(
+                   valueBoxOutput("x1", width = 4),
+                   valueBoxOutput("x2", width = 4),
+                   valueBoxOutput("x3", width = 4)
+                 ),
+                 box(title = "Explain", width = NULL),
+                 box(title = "Another Box", width = NULL)
           )
         )
       )
@@ -121,10 +145,36 @@ ui <- dashboardPage(
   )
 )
 
+##### dashboard server #####
+
 server <- function(input, output, session) {
+  #### load files ####
   # load inventory data
   inv_data <- readr::read_rds("./appdata/fleet_inv.rds")
-  # # load fuel data
+  # count by state with hover text added
+  hover_txt <-
+    inv_data |> 
+    count(garage_state, fuel_class, name = "vehicles") |> 
+    pivot_wider(id_cols = garage_state, 
+                names_from = fuel_class,
+                values_from = vehicles,
+                values_fill = 0) |> 
+    left_join(states, by = "garage_state") |> 
+    mutate(desc = paste(state_name, "<br>",
+                        "Gasoline Vehicles:", GAS, "<br>",
+                        "Ethanol Vehicles:", E85, "<br>",
+                        "Diesel Vehicles:", DSL, "<br>",
+                        "Hybrid Vehicles:", HEV, "<br>",
+                        "Electric Vehicles:", FEV, "<br>",
+                        "Other Fuel Types:", `B20/CNG`)) |> 
+    select(garage_state, desc)
+  
+  inv_state <-
+    inv_data |> 
+      count(garage_state, name = 'vehicle_count') |> 
+      left_join(hover_txt, by = 'garage_state')
+  
+  # load fuel data
   fuel <- readRDS("./appdata/fur_2018_2021.rds")
   
   # extract states
@@ -140,7 +190,7 @@ server <- function(input, output, session) {
     }
   })
   
-   # plot chord
+  #### plot chord ####
   output$inv_chord <- chorddiag::renderChorddiag({
     fuel_desc <- tibble(fuel_class = as.factor(c("HEV", "GAS", "FEV", "E85", "DSL", "B20/CNG")),
                         class_desc = as.factor(c("Gas/Elec Hybrid",
@@ -243,7 +293,7 @@ server <- function(input, output, session) {
                                       icon = icon('gas-pump'),
                                       digits = 0)
 
-  # sunburst
+  #### sunburst ####
   fuel_xwalk <- 
     tibble::tibble(purchase_fuel = c("GAS", "E85", "DSL", 
                                      "B20", "CNG", "LPG",
@@ -318,5 +368,65 @@ server <- function(input, output, session) {
       #        extendsunburstcolors = TRUE)
   })
   
+  # count by state with hover text added
+  inv_state <- ({
+    hover_txt <-
+    inv_data |> 
+      count(garage_state, fuel_class, name = "vehicles") |> 
+      pivot_wider(id_cols = garage_state, 
+                  names_from = fuel_class,
+                  values_from = vehicles,
+                  values_fill = 0) |> 
+      left_join(states, by = "garage_state") |> 
+      mutate(desc = paste(state_name, "<br>",
+                          "Gasoline Vehicles:", GAS, "<br>",
+                          "Ethanol Vehicles:", E85, "<br>",
+                          "Diesel Vehicles:", DSL, "<br>",
+                          "Hybrid Vehicles:", HEV, "<br>",
+                          "Electric Vehicles:", FEV, "<br>",
+                          "Other Fuel Types:", `B20/CNG`)) |> 
+      select(garage_state, desc)
+    
+    inv_data |> 
+      count(garage_state, name = 'vehicle_count') |> 
+      left_join(hover_txt, by = 'garage_state')
+  })
+  
+  #### vehicle map ####
+  output$vehicle_map <- renderPlotly({
+    g <- list(scope = 'usa',
+              projection = list(type = 'albers usa'),
+              showlakes = FALSE)
+    
+    plot_geo(inv_state, 
+             type = 'choropleth', 
+             locationmode = 'USA-states',
+             mode = 'markers') |> 
+      add_trace(z = ~ vehicle_count,
+                text = ~ desc,
+                locations = ~ garage_state,
+                color = ~ vehicle_count) |> 
+      layout(geo = g) |> 
+      hide_colorbar()
+  })
+  
+  #### factoids ####
+  # factoid_veh_age <- {
+  #   
+  #   cy <- Sys.Date() |> lubridate::year()
+  #   
+  #   age <- inv_data |> 
+  #     pull(model_year) |> 
+  #     as.numeric(na.rm = TRUE) |> 
+  #     (\(x) cy - x)() |> 
+  #     mean() |> 
+  #     format(digits = 2)
+  #   
+  #   m = paste("On average, FAA fleet vehicles are", age, "years old.")
+  #   list(age = as.numeric(age),
+  #        message = m)
+  # }
 }
+
+##### shiny call #####
 shinyApp(ui, server)
