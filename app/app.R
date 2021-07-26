@@ -1,13 +1,12 @@
-library(pacman)
-pacman::p_load(dplyr,
-               tidyr,
-               shiny,
-               shinydashboard,
-               shinythemes,
-               chorddiag,
-               plotly,
-               shinyjs,
-               htmltools)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(shiny)
+library(shinydashboard)
+library(chorddiag)
+library(plotly)
+library(htmltools)
+
 # values
 state_abb <- c(state.abb, "DC", "AE", "GU", "PR", "AS")
 state_name <- c(state.name, 
@@ -21,9 +20,9 @@ states <- data.frame(garage_state = state_abb, state_name = state_name)
 # dashboard
 ui <- dashboardPage(
   
-  dashboardHeader(title = "FAA Fleet"),
+  shinydashboard::dashboardHeader(title = "FAA Fleet"),
   
-  dashboardSidebar(
+  shinydashboard::dashboardSidebar(
     sidebarMenu(
       menuItem("Fleet Composition",
                tabName = 'composition',
@@ -34,7 +33,7 @@ ui <- dashboardPage(
     )
   ),
   
-  dashboardBody(
+  shinydashboard::dashboardBody(
     
     tabItems(
       # first tab
@@ -86,7 +85,7 @@ ui <- dashboardPage(
               sliderInput("fuel_dates",
                           "Filter by Date:",
                           min = as.Date("2020-10-01"), # start of FY21
-                          max = max(fuel$date),        # most recent date
+                          max = as.Date("2021-07-19"),        # most recent date
                           value = c(as.Date("2020-10-01"), 
                                     as.Date("2021-07-19")),
                           timeFormat = "%Y-%m-%d", 
@@ -124,19 +123,9 @@ ui <- dashboardPage(
 
 server <- function(input, output, session) {
   # load inventory data
-  inv_data <- readr::read_rds("../data/fleet_inv.rds")
+  inv_data <- readr::read_rds("./appdata/fleet_inv.rds")
   # # load fuel data
-  isnt_out_mad <- function(x, thres = 3, na.rm = TRUE) {
-    abs(x - median(x, na.rm = na.rm)) <= thres * mad(x, na.rm = na.rm)
-  }
-  
-  fuel <- readRDS("../data/fur_2015_2021.rds") |> 
-    tidyr::drop_na(date) |> 
-    dplyr::filter(date >= as.Date("2020-10-01")) |> 
-    # remove negative values
-    dplyr::mutate(units = abs(units)) |> 
-    # remove outliers over 3sd away from median (MAD: Med Abs Dev)
-    dplyr::filter(isnt_out_mad(units))
+  fuel <- readRDS("./appdata/fur_2018_2021.rds")
   
   # extract states
   states <- inv_data |> dplyr::distinct(garage_state)
@@ -151,12 +140,7 @@ server <- function(input, output, session) {
     }
   })
   
-  # # reset UI on button press
-  # observeEvent(input$resetButton, {
-  #   updateSelectizeInput(session, "states", selected = "NULL")
-  # })
-  
-  # plot chord
+   # plot chord
   output$inv_chord <- chorddiag::renderChorddiag({
     fuel_desc <- tibble(fuel_class = as.factor(c("HEV", "GAS", "FEV", "E85", "DSL", "B20/CNG")),
                         class_desc = as.factor(c("Gas/Elec Hybrid",

@@ -1,4 +1,9 @@
 library(vroom)
+library(dplyr)
+
+isnt_out_mad <- function(x, thres = 3, na.rm = TRUE) {
+  abs(x - median(x, na.rm = na.rm)) <= thres * mad(x, na.rm = na.rm)
+}
 
 fuel <- 
   vroom::vroom("./rawdata/FUR_Report_modified.csv", 
@@ -30,7 +35,11 @@ fuel <-
          state = State,
          zip = ZIP,
          purchase_fuel = `Purchased Fuel Type`,
-         units = `GGE Units`)
-
-readr::write_rds(fuel, "./data/fur_2018_2021.rds")
-                
+         units = `GGE Units`) |> 
+  tidyr::drop_na(date) |> 
+  dplyr::filter(date >= as.Date("2020-10-01")) |> 
+  # remove negative values
+  dplyr::mutate(units = abs(units)) |> 
+  # remove outliers over 3sd away from median (MAD: Med Abs Dev)
+  dplyr::filter(isnt_out_mad(units))                
+  readr::write_rds(fuel, "./app/appdata/fur_2018_2021.rds")
