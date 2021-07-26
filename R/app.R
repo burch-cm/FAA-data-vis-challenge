@@ -87,7 +87,8 @@ ui <- dashboardPage(
                           "Filter by Date:",
                           min = as.Date("2020-10-01"), # start of FY21
                           max = max(fuel$date),        # most recent date
-                          value = c(as.Date("2020-10-01"), max(fuel$date)),
+                          value = c(as.Date("2020-10-01"), 
+                                    as.Date("2021-07-19")),
                           timeFormat = "%Y-%m-%d", 
                           width = NULL),
               width = 6,
@@ -272,12 +273,13 @@ server <- function(input, output, session) {
   
   fuel_dat <- reactive({
     fuel |> 
-      filter(date >= input$fuel_dates[1] & date <= input$fuel_dates)
+      filter(date >= input$fuel_dates[1] & date <= input$fuel_dates[2])
   })
   
   output$fuel_sunburst <- renderPlotly({
     fuel_class_sum <- 
-      fuel_dat() |> 
+      fuel_dat() |>
+      # fuel |> 
       select(date, purchase_fuel, units) |>
       left_join(fuel_xwalk, by = 'purchase_fuel') |> 
       group_by(purchase_fuel, fuel_class, fuel_label) |> 
@@ -290,7 +292,8 @@ server <- function(input, output, session) {
       mutate(fuel_class = "")
     
     fuel_plt <- 
-      fuel_dat() |> 
+      fuel_dat() |>
+      # fuel |> 
       filter(date >= as.Date("2020-10-01")) |> 
       select(date, purchase_fuel, units) |>
       left_join(fuel_xwalk, by = 'purchase_fuel') |> 
@@ -299,14 +302,36 @@ server <- function(input, output, session) {
       filter(!is.na(purchase_fuel) & purchase_fuel != 'ELE') |> 
       select(fuel_label, fuel_class, units)
     
+    # cols <- 
+    #   tibble(fuel_label = c("Alternative",
+    #                       "Petroleum",
+    #                       "BioDiesel (B20)",
+    #                       "Compressed<br>Natural Gas",
+    #                       "Diesel",
+    #                       "Ethanol (E85)",
+    #                       "Unleaded<br>Gasoline",
+    #                       "Liquified<br>Petroleum Gas"),
+    #        color = c("orange",
+    #                  "maroon",
+    #                  "honeydew",
+    #                  "goldenrod",
+    #                  "indigo",
+    #                  "olive",
+    #                  "mediumslateblue",
+    #                  "purple"))
+    
     fuel_class_sum |> 
       rbind(fuel_plt) |> 
+      # left_join(cols, by = 'fuel_label') |> 
       plotly::plot_ly(
         labels = ~ fuel_label,
         parents = ~ fuel_class,
         values = ~ round(units, 0),
+        colors = ~ fuel_label,
         type = 'sunburst'
       )
+      # layout(sunbustcolorway = ~ color,
+      #        extendsunburstcolors = TRUE)
   })
   
 }
