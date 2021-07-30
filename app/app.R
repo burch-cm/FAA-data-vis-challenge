@@ -5,9 +5,8 @@ library(shiny)
 library(shinydashboard)
 library(chorddiag)
 library(plotly)
-library(dygraphs)
-library(htmlwidgets)
 library(htmltools)
+library(shinyalert)
 
 ##### preload #####
 # values
@@ -57,9 +56,6 @@ ui <- dashboardPage(
       menuItem("Fleet Composition",
                tabName = 'composition',
                icon = icon('car')),
-      menuItem("Vehicle Location",
-               tabName = 'vehMap',
-               icon = icon('map')),
       menuItem("Fuel Use",
                tabName = 'fuelUse',
                icon = icon('gas-pump'))
@@ -71,6 +67,8 @@ ui <- dashboardPage(
     tags$head(
       tags$link(rel = 'stylesheet', type = 'text/css', href = 'app_style.css')
     ),
+    
+    useShinyalert(),
     
     tabItems(
       #### chord tab ####
@@ -110,6 +108,8 @@ ui <- dashboardPage(
                           construction (e.g., bucket loaders) or vehicles without 
                           an engine (e.g. trailers)."),
                      title = "What types of vehicles are tracked?",
+                     width = NULL),
+                 box(actionLink("demo_chord", "How do I use this chart?"),
                      width = NULL)
           )
         )
@@ -129,7 +129,6 @@ ui <- dashboardPage(
                                     as.Date("2021-07-19")),
                           timeFormat = "%Y-%m-%d",
                           width = NULL),
-              dygraphOutput("dygraph", height = '50px'),
               width = 6,
               title = "What type of fuel does the FAA fleet use?"),
           column(width = 6,
@@ -153,41 +152,9 @@ ui <- dashboardPage(
                           construction (e.g., bucket loaders) or vehicles without 
                           an engine (e.g. trailers)."),
                      title = "What types of vehicles are tracked?",
+                     width = NULL),
+                 box(actionLink("demo_sunburst", "How do I use this chart?"),
                      width = NULL)
-          )
-        )
-      ),
-      
-       #### map tab ####
-      tabItem(tabName = 'vehMap',
-        fluidRow(
-          box(
-            plotlyOutput("vehicle_map", height = "500px", width = "100%"),
-            fluidRow(
-              column(6,
-                     selectizeInput("map_fuel_sel",
-                                 label = "Vehicle Fuel Type",
-                                 choices = fuel_desc$class_desc,
-                                 multiple = TRUE,
-                                 options = list(plugins = list('remove_button')))),
-              column(6, 
-                     selectizeInput("map_type_sel",
-                                 label = "Body Type",
-                                 choices = veh_xwalk$vehicle_class,
-                                 multiple = TRUE,
-                                 options = list(plugins = list('remove_button'))))
-            ),    
-            width = 6,
-            title = "Where are FAA vehicles located?"),
-          column(width = 6,
-                 valueBoxOutput("total_veh", width = NULL),
-                 fluidRow(
-                   valueBoxOutput("x1", width = 4),
-                   valueBoxOutput("x2", width = 4),
-                   valueBoxOutput("x3", width = 4)
-                 ),
-                 box(title = "Explain", width = NULL),
-                 box(title = "Another Box", width = NULL)
           )
         )
       )
@@ -221,8 +188,6 @@ server <- function(input, output, session) {
       fuel
     }
     
-    # filter(date >= input$dygraph_date_window[[1]] & 
-    #        date <= input$dygraph_date_window[[2]])
   })
   
   # count by state with hover text added
@@ -258,6 +223,22 @@ server <- function(input, output, session) {
   # specify chord colors
   group_cols <- RColorBrewer::brewer.pal(n = 11, name = "Spectral")
   
+  #### demos ####
+  observeEvent(input$demo_chord, {
+    shinyalert(imageUrl = "chord_gif.gif",
+               showConfirmButton = TRUE,
+               imageWidth = 500,
+               imageHeight = 500
+               )
+  })
+  
+  observeEvent(input$demo_sunburst, {
+    shinyalert(imageUrl = "sunburst_gif.gif",
+               showConfirmButton = TRUE,
+               imageWidth = 500,
+               imageHeight = 500
+    )
+  })
   
   #### render chord ####
   output$inv_chord <- chorddiag::renderChorddiag({
@@ -407,137 +388,6 @@ server <- function(input, output, session) {
       ) |> 
       layout(colorway = ~color)
   })
-  
-  
-  
-  #### render map ####
-  
-  
-  state_class_count <- reactive({
-    sel_state() |>
-      count(garage_state, class_desc, name = "units")
-  })
-  
-  output$total_veh <- renderValueBox({
-    valueBox(value = nrow(sel_state()),
-             subtitle = "Total vehicles in selected States",
-             icon = icon('car'),
-             width = NULL)
-  })
-  
-  render_state_box <- function(group, subtitle, col, icon = icon('car'), ...) {
-    renderValueBox({
-      valueBox(value = format(sum(filter(state_class_count(), 
-                                         class_desc %in% group)
-                                  $units, na.rm = TRUE),
-                              big.mark = ",", 
-                              trim = TRUE, 
-                              scientific = FALSE,
-                              ...),
-               subtitle = subtitle,
-               col = col,
-               icon = icon,
-               width = NULL)
-    })
-  }
-  
-  output$x1 <- render_state_box(group = c("Electric"),
-                                     subtitle = "Electric Vehicles",
-                                     col = "green",
-                                     icon = icon('plug'),
-                                     digits = 2)
-  output$x2 <- render_state_box(group = c("Ethanol (E85)", "Gas/Elec Hybrid",
-                                          "Other Fuel"),
-                                    subtitle = "Alternative Fuel Vehicles",
-                                    col = "light-blue",
-                                    icon = icon('recycle'),
-                                    digits = 0)
-  output$x3 <- render_state_box(group = c("Gasoline", "Diesel"),
-                                      subtitle = "Petroleum Vehicles",
-                                      col = "red",
-                                      icon = icon('gas-pump'),
-                                      digits = 0)
-  
-  
-  # count by state with hover text added
-  # inv_state <- ({
-  sel_state <- reactive({
-    
-    fuel_sel <- 
-      if(is.null(input$map_fuel_sel)) {
-        pull(distinct(fuel_desc, class_desc), class_desc)
-      } else {
-        input$map_fuel_sel
-      }
-    
-    class_sel <- 
-      if(is.null(input$map_type_sel)) {
-        pull(distinct(veh_xwalk, vehicle_class))
-      } else {
-        input$map_type_sel
-      }
-    
-    inv_data |> 
-      left_join(fuel_desc, by = 'fuel_class') |> 
-      filter(class_desc %in% fuel_sel) |> 
-      filter(vehicle_class %in% class_sel)
-    
-  })
-  
-  inv_state <- reactive({
-    sel_state() |> 
-      count(garage_state, name = 'vehicle_count') #|>
-      # left_join(hover_txt, by = 'garage_state')
-  })
-  
-  # draw map
-  output$vehicle_map <- renderPlotly({
-    g <- list(scope = 'usa',
-              projection = list(type = 'albers usa'),
-              showlakes = FALSE)
-    
-    plot_geo(inv_state(),
-             type = 'choropleth', 
-             locationmode = 'USA-states') |> 
-      add_trace(z = ~ vehicle_count,
-                locations = ~ garage_state,
-                color = ~ vehicle_count,
-                hovertemplate = 'vehicle count: %{z:.0f}<extra></extra>') |>
-      layout(geo = g) |> 
-      hide_colorbar() |> 
-      onRender("
-        function(el) {
-          el.on('plotly_click', function(d) {
-            console.log('Click: ', d);
-          });
-        }
-      ")
-  })
-  
-  #### factoids ####
-  # factoid <- list()
-  # factoid$veh_age <- function(.df) {
-  # 
-  #   cy <- Sys.Date() |> lubridate::year()
-  # 
-  #   age <- .df |>
-  #     pull(model_year) |>
-  #     as.numeric(na.rm = TRUE) |>
-  #     (\(x) cy - x)() |>
-  #     mean() |>
-  #     format(digits = 2)
-  # 
-  #   m = paste("On average, FAA fleet vehicles are", age, "years old.")
-  #   list(age = as.numeric(age),
-  #        message = m)
-  # }
-  # 
-  # factoid$type_count <- function(.df, ...) {
-  #   .df |> 
-  #     count(vehicle_type, name = "vehicles", ...)
-  # }
-  
-  
   
 }
 
