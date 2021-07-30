@@ -31,6 +31,7 @@ fuel_mx <-
   fuel |> 
   select(date, purchase_fuel, units) |>
   left_join(fuel_xwalk, by = 'purchase_fuel') |> 
+  count(date, fuel_class, name = 'units', )
   group_by(date, fuel_class) |> 
   summarize(units = sum(units), .groups = 'drop') |> 
   pivot_wider(id_cols = date, names_from = fuel_class, values_from = units) |> 
@@ -39,14 +40,15 @@ fuel_mx <-
 fuel_matrix <-
   fuel_mx |> 
   select(Petroleum, Alternative, Electric) |> 
-  xts(order.by = fuel_mx$date)
+  xts::xts(order.by = fuel_mx$date)
 
 library(dygraphs)
 dygraph(fuel_matrix) |> 
   dySeries('Petroleum') |> 
   dySeries('Alternative') |> 
   dySeries('Electric') |> 
-  dyOptions(colors = RColorBrewer::brewer.pal(3, 'Set2'),
+  dyOptions(#colors = RColorBrewer::brewer.pal(3, 'Set2'),
+            colors = c("maroon", "orange", "green"),
             stepPlot = TRUE,
             fillGraph = TRUE,
             fillAlpha = 0.5,
@@ -54,8 +56,8 @@ dygraph(fuel_matrix) |>
   # dyHighlight(highlightCircleSize = 2,
   #             highlightSeriesBackgroundAlpha = 0.2,
   #             hideOnMouseOut = FALSE) |> 
-  dyAxis('y', label = "Units (GGE)") |> 
-  dyRangeSelector(height = 20)
+  dyAxis('y', label = "Units (GGE)") # |> 
+  # dyRangeSelector(height = 20)
 
 
 ##### plotly series #####
