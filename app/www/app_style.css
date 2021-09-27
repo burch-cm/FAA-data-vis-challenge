@@ -1,0 +1,17 @@
+.selectize-dropdown {
+  bottom: 100% !important;
+  top:auto!important;
+}
+
+.shiny-split-layout {
+  overflow: visible;
+}
+
+.petro-box {
+  background-color: #800000!important;
+}
+
+.alt-box {
+  background-color:  #008080!important;
+}
+
